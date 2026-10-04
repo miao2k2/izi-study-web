@@ -85,6 +85,12 @@ export default function DocumentDetailPage() {
     return ids;
   }, [childrenMap]);
 
+  // Đếm điều (kind = ARTICLE) - hook phải đặt trên mọi early return
+  const articleCount = useMemo(
+    () => sections.filter((s) => s.kind === "ARTICLE").length,
+    [sections],
+  );
+
   if (loading) {
     return (
       <div style={{ textAlign: "center", padding: 60 }}>
@@ -128,7 +134,7 @@ export default function DocumentDetailPage() {
               {doc.documentNo && <Tag color="cyan">{doc.documentNo}</Tag>}
               {doc.category && <Tag color="green">{doc.category.name}</Tag>}
               <Tag>
-                {chapterNodes.length} chương · {totalCount} mục
+                {chapterNodes.length} chương · {articleCount} điều
               </Tag>
             </Space>
           </Space>
