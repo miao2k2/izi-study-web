@@ -261,9 +261,17 @@ export function parseLawText(
         });
         continue;
       }
-      // Text thừa trong Điều
-      currentArticle.content =
-        (currentArticle.content ? currentArticle.content + " " : "") + p;
+      // Text thừa trong Điều: gán vào Khoản/Điểm cuối cùng nếu có,
+      // để tránh nuốt mất nội dung tiếp theo của Khoản hiện tại.
+      // Nếu Điều chưa có Khoản/Điểm nào thì gán vào content của Điều (giữ cũ).
+      const lastChild = currentArticle.children.at(-1);
+      if (lastChild) {
+        lastChild.content =
+          (lastChild.content ? lastChild.content + " " : "") + p;
+      } else {
+        currentArticle.content =
+          (currentArticle.content ? currentArticle.content + " " : "") + p;
+      }
     } else if (currentSection && !currentSection.title) {
       const rest = collectTrailingText(paragraphs, i, "SECTION");
       const text = rest ?? p;
