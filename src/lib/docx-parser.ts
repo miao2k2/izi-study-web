@@ -147,7 +147,8 @@ export function parseLawText(
         kind: "ARTICLE",
         number: num,
         title: buildTitle("ARTICLE", num, titleRest),
-        content: titleRest || undefined,
+        // content chỉ chứa text thừa (không lặp titleRest) - vd "Trong văn bản này..."
+        content: undefined,
         children: [],
       };
       // Article thuộc Mục (nếu có) hoặc thuộc Chương
@@ -156,9 +157,11 @@ export function parseLawText(
       continue;
     }
 
-    // 3b. Nghị quyết: item "1. Nâng cao nhận thức..." -> ARTICLE (1 cấp)
+    // 3b. Nghị quyết: item "1. Nâng cao nhận thức..." -> ARTICLE (1 cấp).
+    // Chỉ match khi CHƯA có currentArticle nào - nếu đang trong điều thì
+    // dòng "1. ..." phải là Khoản (xử lý ở case 4 phía dưới).
     const nqItemMatch = p.match(/^(\d+)\.\s+(.+)$/);
-    if (nqItemMatch && currentChapter !== root) {
+    if (nqItemMatch && currentChapter !== root && !currentArticle) {
       const num = nqItemMatch[1];
       const titleRest = nqItemMatch[2].trim();
       // Reset currentSection để article tiếp theo rơi đúng vị trí
@@ -166,7 +169,7 @@ export function parseLawText(
         kind: "ARTICLE",
         number: num,
         title: buildTitle("ARTICLE", num, titleRest),
-        content: titleRest,
+        content: undefined,
         children: [],
       };
       const container = currentSection ?? currentChapter;
@@ -207,6 +210,18 @@ export function parseLawText(
       // Nội dung thuộc Điều nhưng không phải khoản/điểm: gộp vào content
       currentArticle.content =
         (currentArticle.content ? currentArticle.content + " " : "") + p;
+    } else if (currentSection && !currentSection.title) {
+      // Mục chỉ có "Mục 1" rời rạc, dòng kế tiếp không match cấp nào → gom vào title
+      const combined = buildTitle("SECTION", currentSection.number, p);
+      if (combined) currentSection.title = combined;
+    } else if (
+      currentChapter !== root &&
+      !currentChapter.title &&
+      !currentSection
+    ) {
+      // Chương chỉ có "Chương I" rời rạc, dòng kế tiếp không match cấp nào → gom vào title
+      const combined = buildTitle("CHAPTER", currentChapter.number, p);
+      if (combined) currentChapter.title = combined;
     }
   }
 

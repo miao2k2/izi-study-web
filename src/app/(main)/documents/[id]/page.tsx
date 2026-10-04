@@ -181,7 +181,7 @@ export default function DocumentDetailPage() {
             }
             items={chapterNodes.map((ch) => ({
               key: ch.id,
-              label: <NodeLabel section={ch} />,
+              label: <NodeContent section={ch} />,
               children: (
                 <NodeCollapse
                   parentId={ch.id}
@@ -199,10 +199,25 @@ export default function DocumentDetailPage() {
   );
 }
 
-/** Render label đầy đủ cho 1 section - lấy thẳng title từ DB và bôi đen */
-function NodeLabel({ section }: { section: Section }) {
-  const text = displayTitle(section);
-  return <Text strong>{text}</Text>;
+/**
+ * Render label đầy đủ cho 1 section - title (bôi đen) + content (text thừa nếu có)
+ * Dùng chung cho panel header và leaf row.
+ */
+function NodeContent({ section }: { section: Section }) {
+  const title = displayTitle(section);
+  const content = section.content?.trim();
+  return (
+    <div>
+      <Text strong style={{ whiteSpace: "pre-wrap" }}>
+        {title}
+      </Text>
+      {content && (
+        <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>
+          <Text type="secondary">{content}</Text>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -257,7 +272,7 @@ function NodeCollapse({
           }}
           items={expandableKids.map((n) => ({
             key: n.id,
-            label: <NodeLabel section={n} />,
+            label: <NodeContent section={n} />,
             children: (
               <NodeCollapse
                 parentId={n.id}
@@ -278,9 +293,8 @@ function NodeCollapse({
   );
 }
 
-/** Leaf: Khoản / Điểm / Điều không có khoản con - hiển thị thẳng title (bôi đen) */
+/** Leaf: Khoản / Điểm / Điều không có khoản con - hiển thị title + content */
 function LeafRow({ node, depth }: { node: Section; depth: number }) {
-  const text = displayTitle(node);
   const indent = depth * 16;
 
   return (
@@ -292,9 +306,7 @@ function LeafRow({ node, depth }: { node: Section; depth: number }) {
         borderLeft: depth > 0 ? "2px solid #d9d9d9" : undefined,
       }}
     >
-      <Text strong style={{ whiteSpace: "pre-wrap" }}>
-        {text}
-      </Text>
+      <NodeContent section={node} />
     </div>
   );
 }
