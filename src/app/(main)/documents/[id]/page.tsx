@@ -182,15 +182,27 @@ export default function DocumentDetailPage() {
             }
             items={chapterNodes.map((ch) => ({
               key: ch.id,
-              label: <NodeContent section={ch} />,
+              label: <NodeTitle section={ch} />,
               children: (
-                <NodeCollapse
-                  parentId={ch.id}
-                  depth={0}
-                  childrenMap={childrenMap}
-                  activeKeys={activeKeys}
-                  setActiveKeys={setActiveKeys}
-                />
+                <>
+                  {ch.content?.trim() && (
+                    <div
+                      style={{
+                        padding: "0 0 8px 8px",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      <Text type="secondary">{ch.content}</Text>
+                    </div>
+                  )}
+                  <NodeCollapse
+                    parentId={ch.id}
+                    depth={0}
+                    childrenMap={childrenMap}
+                    activeKeys={activeKeys}
+                    setActiveKeys={setActiveKeys}
+                  />
+                </>
               ),
             }))}
           />
@@ -201,23 +213,16 @@ export default function DocumentDetailPage() {
 }
 
 /**
- * Render label đầy đủ cho 1 section - title (bôi đen) + content (text thừa nếu có)
- * Dùng chung cho panel header và leaf row.
+ * Header label cho panel Collapse: chỉ hiển thị title (đậm).
+ * Khi panel collapse, đây là phần duy nhất người dùng thấy.
+ * Khi expand, content được render riêng trong `children` của Collapse.
  */
-function NodeContent({ section }: { section: Section }) {
+function NodeTitle({ section }: { section: Section }) {
   const title = displayTitle(section);
-  const content = section.content?.trim();
   return (
-    <div>
-      <Text strong style={{ whiteSpace: "pre-wrap" }}>
-        {title}
-      </Text>
-      {content && (
-        <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>
-          <Text type="secondary">{content}</Text>
-        </div>
-      )}
-    </div>
+    <Text strong style={{ whiteSpace: "pre-wrap" }}>
+      {title}
+    </Text>
   );
 }
 
@@ -277,29 +282,31 @@ function NodeCollapse({
               items={[
                 {
                   key: n.id,
-                  label: <NodeContent section={n} />,
-                  children: hasChildren ? (
-                    <NodeCollapse
-                      parentId={n.id}
-                      depth={depth + 1}
-                      childrenMap={childrenMap}
-                      activeKeys={activeKeys}
-                      setActiveKeys={setActiveKeys}
-                    />
-                  ) : (
-                    // ARTICLE không có children: hiển thị content bên trong body
-                    n.content ? (
-                      <div
-                        style={{
-                          padding: "4px 0 8px 8px",
-                          whiteSpace: "pre-wrap",
-                        }}
-                      >
-                        <Text type="secondary">{n.content}</Text>
-                      </div>
-                    ) : (
-                      <Text type="secondary">(Không có nội dung)</Text>
-                    )
+                  label: <NodeTitle section={n} />,
+                  children: (
+                    <>
+                      {n.content?.trim() && (
+                        <div
+                          style={{
+                            padding: "0 0 8px 8px",
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          <Text type="secondary">{n.content}</Text>
+                        </div>
+                      )}
+                      {hasChildren ? (
+                        <NodeCollapse
+                          parentId={n.id}
+                          depth={depth + 1}
+                          childrenMap={childrenMap}
+                          activeKeys={activeKeys}
+                          setActiveKeys={setActiveKeys}
+                        />
+                      ) : !n.content?.trim() ? (
+                        <Text type="secondary">(Không có nội dung)</Text>
+                      ) : null}
+                    </>
                   ),
                   style:
                     depth === 0
