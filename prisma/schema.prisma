@@ -1,0 +1,237 @@
+// Prisma schema for izi-study-web
+// Hệ thống học thuộc văn bản pháp luật
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =========================================================
+// Auth & Users
+// =========================================================
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String
+  role          UserRole  @default(USER)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Quan hệ
+  privateKeyUsed PrivateKey? @relation(fields: [privateKeyId], references: [id])
+  privateKeyId   String?
+
+  categories   Category[]
+  documents    Document[]
+  flashcards   Flashcard[]
+  quizzes      Quiz[]
+  studyProgress StudyProgress[]
+  quizAttempts QuizAttempt[]
+}
+
+model PrivateKey {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  description String?
+  isUsed      Boolean  @default(false)
+  usedAt      DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  users User[]
+}
+
+// =========================================================
+// Categories (thư mục có thể lồng nhau)
+// =========================================================
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner    User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryTree")
+  documents Document[]
+}
+
+// =========================================================
+// Documents (văn bản pháp luật)
+// =========================================================
+
+enum DocumentStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model Document {
+  id          String         @id @default(cuid())
+  title       String
+  description String?
+  documentNo  String?        // Số hiệu văn bản (vd: 20/2023/QH15)
+  issuedDate  DateTime?
+  effectiveDate DateTime?
+  sourceFile  String?        // Đường dẫn file docx đã import (nếu có)
+  status      DocumentStatus @default(DRAFT)
+  ownerId     String
+  categoryId  String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  owner    User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  // Self-relation cho cây nội dung
+  sections Section[]
+
+  flashcards Flashcard[]
+  quizzes    Quiz[]
+}
+
+// Section: bảng đệm chứa mọi node trong cây nội dung
+// kind: CHAPTER | SECTION | ARTICLE | CLAUSE | POINT
+model Section {
+  id         String   @id @default(cuid())
+  documentId String
+  parentId   String?
+  kind       String   // CHAPTER | SECTION | ARTICLE | CLAUSE | POINT
+  order      Int      @default(0)
+  number     String?  // Số thứ tự hiển thị (vd: "I", "1", "Điều 5")
+  title      String?  // Tiêu đề (nếu có)
+  content    String?  @db.Text  // Nội dung văn bản
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  document Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  parent   Section?  @relation("SectionTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children Section[] @relation("SectionTree")
+
+  flashcards Flashcard[]
+  quizzes    Quiz[]
+
+  @@index([documentId, kind])
+  @@index([parentId])
+}
+
+// =========================================================
+// Flashcard
+// =========================================================
+
+model Flashcard {
+  id         String   @id @default(cuid())
+  documentId String
+  ownerId    String
+  // Gắn theo tài liệu (null) hoặc theo 1 section cụ thể (chapter/article)
+  sectionId  String?
+  front      String   @db.Text
+  back       String   @db.Text
+  tags       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  section  Section? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  progress StudyProgress[]
+
+  @@index([documentId])
+}
+
+model StudyProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  flashcardId String
+  ease        Int      @default(2) // SRS-style: 0=Again, 1=Hard, 2=Good, 3=Easy
+  reviewCount Int      @default(0)
+  lastReview  DateTime?
+  nextReview  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  flashcard Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, flashcardId])
+}
+
+// =========================================================
+// Quiz
+// =========================================================
+
+model Quiz {
+  id         String   @id @default(cuid())
+  documentId String
+  ownerId    String
+  sectionId  String?
+  question   String   @db.Text
+  explanation String? @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  section  Section? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  answers  QuizAnswer[]
+  attempts QuizAttempt[]
+
+  @@index([documentId])
+}
+
+model QuizAnswer {
+  id         String   @id @default(cuid())
+  quizId     String
+  text       String   @db.Text
+  isCorrect  Boolean  @default(false)
+  order      Int      @default(0)
+
+  quiz    Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  results QuizResult[]
+}
+
+model QuizAttempt {
+  id          String   @id @default(cuid())
+  userId      String
+  quizId      String
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  score       Int?     // số câu đúng
+  total       Int?     // tổng số câu
+
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz    Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  results QuizResult[]
+
+  @@index([userId, quizId])
+}
+
+model QuizResult {
+  id           String   @id @default(cuid())
+  attemptId    String
+  answerId     String
+  isSelected   Boolean
+  isCorrect    Boolean
+
+  attempt QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  answer  QuizAnswer  @relation(fields: [answerId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, answerId])
+}
