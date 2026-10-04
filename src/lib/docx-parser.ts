@@ -116,7 +116,7 @@ export function parseLawText(
       // Chương chỉ có số ở dòng riêng - lấy title phía sau nếu có
       // (vd file .docx có "Chương I" rồi đến "NHỮNG QUY ĐỊNH CHUNG" ở dòng kế tiếp)
       if (!rest) {
-        rest = collectTrailingText(paragraphs, i, "CHAPTER");
+        rest = collectTrailingText(paragraphs, i, "CHAPTER") ?? "";
       }
       currentChapter = {
         kind: "CHAPTER",
@@ -174,7 +174,7 @@ export function parseLawText(
       let titleRest = sectionMatch[2]?.replace(/^\.\s*/, "").trim();
       // Mục chỉ có số ở dòng riêng - lấy title phía sau nếu có
       if (!titleRest) {
-        titleRest = collectTrailingText(paragraphs, i, "SECTION");
+        titleRest = collectTrailingText(paragraphs, i, "SECTION") ?? "";
       }
       currentSection = {
         kind: "SECTION",
