@@ -112,7 +112,12 @@ export function parseLawText(
     const chapterMatch = p.match(/^Chương\s+([IVXLCDM]+)\b\s*(.*)$/i);
     if (chapterMatch) {
       const num = chapterMatch[1];
-      const rest = chapterMatch[2]?.trim();
+      let rest = chapterMatch[2]?.trim();
+      // Chương chỉ có số ở dòng riêng - lấy title phía sau nếu có
+      // (vd file .docx có "Chương I" rồi đến "NHỮNG QUY ĐỊNH CHUNG" ở dòng kế tiếp)
+      if (!rest) {
+        rest = collectTrailingText(paragraphs, i, "CHAPTER");
+      }
       currentChapter = {
         kind: "CHAPTER",
         number: num,
@@ -166,7 +171,11 @@ export function parseLawText(
     const sectionMatch = p.match(/^Mục\s+(\d+)\s*(.*)$/);
     if (sectionMatch) {
       const num = sectionMatch[1];
-      const titleRest = sectionMatch[2]?.replace(/^\.\s*/, "").trim();
+      let titleRest = sectionMatch[2]?.replace(/^\.\s*/, "").trim();
+      // Mục chỉ có số ở dòng riêng - lấy title phía sau nếu có
+      if (!titleRest) {
+        titleRest = collectTrailingText(paragraphs, i, "SECTION");
+      }
       currentSection = {
         kind: "SECTION",
         number: num,
