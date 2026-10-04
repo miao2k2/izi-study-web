@@ -243,52 +243,54 @@ function NodeCollapse({
     return <Text type="secondary">(Trống)</Text>;
   }
 
+  // Giữ nguyên thứ tự order từ childrenMap (đã sort ở useMemo),
+  // không tách riêng leaf/expandable để tránh Điều không có khoản
+  // (vd Điều 2) bị đẩy lên đầu Chương.
   const expandableKids = kids.filter(
     (k) => (childrenMap.get(k.id) ?? []).length > 0,
   );
-  const leafKids = kids.filter(
-    (k) => (childrenMap.get(k.id) ?? []).length === 0,
-  );
+  const expandableById = new Map(expandableKids.map((k) => [k.id, k]));
 
   return (
     <div>
-      {leafKids.length > 0 && (
-        <div style={{ marginBottom: 8 }}>
-          {leafKids.map((n) => (
-            <LeafRow key={n.id} node={n} depth={depth} />
-          ))}
-        </div>
-      )}
-      {expandableKids.length > 0 && (
-        <Collapse
-          ghost={depth === 0 ? false : true}
-          activeKey={activeKeys}
-          onChange={(keys) => {
-            const arr = Array.isArray(keys) ? keys : [keys];
-            const set = new Set(activeKeys);
-            for (const k of expandableKids) set.delete(k.id);
-            for (const k of arr) set.add(k);
-            setActiveKeys(Array.from(set));
-          }}
-          items={expandableKids.map((n) => ({
-            key: n.id,
-            label: <NodeContent section={n} />,
-            children: (
-              <NodeCollapse
-                parentId={n.id}
-                depth={depth + 1}
-                childrenMap={childrenMap}
-                activeKeys={activeKeys}
-                setActiveKeys={setActiveKeys}
-              />
-            ),
-            style:
-              depth === 0
-                ? { borderLeft: "3px solid #16a34a" }
-                : undefined,
-          }))}
-        />
-      )}
+      {kids.map((n) => {
+        if (expandableById.has(n.id)) {
+          return (
+            <Collapse
+              key={n.id}
+              ghost={depth === 0 ? false : true}
+              activeKey={activeKeys}
+              onChange={(keys) => {
+                const arr = Array.isArray(keys) ? keys : [keys];
+                const set = new Set(activeKeys);
+                for (const k of expandableKids) set.delete(k.id);
+                for (const k of arr) set.add(k);
+                setActiveKeys(Array.from(set));
+              }}
+              items={[
+                {
+                  key: n.id,
+                  label: <NodeContent section={n} />,
+                  children: (
+                    <NodeCollapse
+                      parentId={n.id}
+                      depth={depth + 1}
+                      childrenMap={childrenMap}
+                      activeKeys={activeKeys}
+                      setActiveKeys={setActiveKeys}
+                    />
+                  ),
+                  style:
+                    depth === 0
+                      ? { borderLeft: "3px solid #16a34a" }
+                      : undefined,
+                },
+              ]}
+            />
+          );
+        }
+        return <LeafRow key={n.id} node={n} depth={depth} />;
+      })}
     </div>
   );
 }

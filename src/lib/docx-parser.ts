@@ -38,6 +38,45 @@ const KIND_LABEL: Record<SectionKind, string> = {
   POINT: "Điểm",
 };
 
+/**
+ * Gom các dòng text kế tiếp ngay sau chapter/section chỉ có số (không có title).
+ * Dừng khi gặp 1 dòng match cấp mới (chapter/section/article/clause/point).
+ * Trả về phần text đã gom (bỏ dòng đầu vì p không) - hoặc undefined nếu không có.
+ *
+ * @param paragraphs - toàn bộ paragraphs
+ * @param i - index hiện tại (chính là dòng "p")
+ * @param kind - loại đang gom (CHAPTER/SECTION)
+ */
+function collectTrailingText(
+  paragraphs: { text: string; bold: boolean }[],
+  i: number,
+  kind: "CHAPTER" | "SECTION",
+): string | undefined {
+  const parts: string[] = [];
+  let j = i + 1;
+  while (j < paragraphs.length) {
+    const next = paragraphs[j].text.trim();
+    if (!next) {
+      j++;
+      continue;
+    }
+    // Dừng khi dòng tiếp theo khởi đầu 1 cấp mới
+    if (
+      /^Chương\s+[IVXLCDM]+\b/i.test(next) ||
+      /^([IVXLCDM]+)\s*-\s*/.test(next) ||
+      /^Mục\s+\d+/i.test(next) ||
+      /^Điều\s+\d+/i.test(next)
+    ) {
+      break;
+    }
+    parts.push(next);
+    j++;
+    // Giới hạn tối đa 5 dòng để tránh nuốt nhầm
+    if (parts.length >= 5) break;
+  }
+  return parts.length > 0 ? parts.join(" ") : undefined;
+}
+
 /** Build tiêu đề đầy đủ theo kind. Nếu titleRest rỗng trả về undefined. */
 function buildTitle(
   kind: SectionKind,
@@ -71,12 +110,15 @@ export function parseLawText(
     if (!p) continue;
 
     // 1. Chương
-    const chapterMatch = p.match(/^Chương\s+([IVXLCDM]+)\b\s*$/i);
+    // Chấp nhận các dạng: "Chương I", "Chương I.", "Chương I NHỮNG QUY ĐỊNH CHUNG"...
+    const chapterMatch = p.match(/^Chương\s+([IVXLCDM]+)\b\s*(.*)$/i);
     if (chapterMatch) {
+      const num = chapterMatch[1];
+      const rest = chapterMatch[2]?.trim();
       currentChapter = {
         kind: "CHAPTER",
-        number: chapterMatch[1],
-        title: buildTitle("CHAPTER", chapterMatch[1], ""),
+        number: num,
+        title: buildTitle("CHAPTER", num, rest),
         children: [],
       };
       root.children.push(currentChapter);
@@ -141,6 +183,17 @@ export function parseLawText(
     // 3. Điều
     const articleMatch = p.match(/^Điều\s+(\d+)\s*\.?\s*(.*)$/);
     if (articleMatch) {
+      // Nếu chưa có Chương nào (file bị cắt từ giữa Chương trước) - tạo Chương ảo
+      if (currentChapter === root) {
+        currentChapter = {
+          kind: "CHAPTER",
+          number: "0",
+          title: buildTitle("CHAPTER", "0", "Phần mở đầu"),
+          children: [],
+        };
+        root.children.push(currentChapter);
+        currentSection = null;
+      }
       const num = articleMatch[1];
       const titleRest = articleMatch[2]?.trim();
       currentArticle = {
@@ -161,7 +214,18 @@ export function parseLawText(
     // Chỉ match khi CHƯA có currentArticle nào - nếu đang trong điều thì
     // dòng "1. ..." phải là Khoản (xử lý ở case 4 phía dưới).
     const nqItemMatch = p.match(/^(\d+)\.\s+(.+)$/);
-    if (nqItemMatch && currentChapter !== root && !currentArticle) {
+    if (nqItemMatch && !currentArticle) {
+      // Nếu chưa có Chương nào - tạo Chương ảo
+      if (currentChapter === root) {
+        currentChapter = {
+          kind: "CHAPTER",
+          number: "0",
+          title: buildTitle("CHAPTER", "0", "Phần mở đầu"),
+          children: [],
+        };
+        root.children.push(currentChapter);
+        currentSection = null;
+      }
       const num = nqItemMatch[1];
       const titleRest = nqItemMatch[2].trim();
       // Reset currentSection để article tiếp theo rơi đúng vị trí
@@ -211,16 +275,20 @@ export function parseLawText(
       currentArticle.content =
         (currentArticle.content ? currentArticle.content + " " : "") + p;
     } else if (currentSection && !currentSection.title) {
-      // Mục chỉ có "Mục 1" rời rạc, dòng kế tiếp không match cấp nào → gom vào title
-      const combined = buildTitle("SECTION", currentSection.number, p);
+      // Mục chỉ có "Mục 1" rời rạc → gom các dòng kế tiếp vào title
+      const rest = collectTrailingText(paragraphs, i, "SECTION");
+      const text = rest ?? p;
+      const combined = buildTitle("SECTION", currentSection.number, text);
       if (combined) currentSection.title = combined;
     } else if (
       currentChapter !== root &&
       !currentChapter.title &&
       !currentSection
     ) {
-      // Chương chỉ có "Chương I" rời rạc, dòng kế tiếp không match cấp nào → gom vào title
-      const combined = buildTitle("CHAPTER", currentChapter.number, p);
+      // Chương chỉ có "Chương I" rời rạc → gom các dòng kế tiếp vào title
+      const rest = collectTrailingText(paragraphs, i, "CHAPTER");
+      const text = rest ?? p;
+      const combined = buildTitle("CHAPTER", currentChapter.number, text);
       if (combined) currentChapter.title = combined;
     }
   }
