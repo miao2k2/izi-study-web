@@ -56,7 +56,7 @@ export default function DocumentDetailPage() {
       fetch(`/api/documents/${id}/sections`).then((r) => r.json()),
     ]).then(([d, s]) => {
       setDoc(d);
-      setSections(s);
+      setSections(Array.isArray(s) ? s : []);
       setLoading(false);
     });
   }, [params.id]);
@@ -64,7 +64,7 @@ export default function DocumentDetailPage() {
   // Xây map children: parentId -> children (sorted by order)
   const childrenMap = useMemo(() => {
     const map = new Map<string | null, Section[]>();
-    for (const s of sections) {
+    for (const s of Array.isArray(sections) ? sections : []) {
       const key = s.parentId ?? null;
       const arr = map.get(key) ?? [];
       arr.push(s);
@@ -104,7 +104,8 @@ export default function DocumentDetailPage() {
   }
 
   const chapterNodes = childrenMap.get(null) ?? [];
-  const totalCount = sections.length;
+  const safeSections = Array.isArray(sections) ? sections : [];
+  const totalCount = safeSections.length;
 
   return (
     <div>
@@ -243,18 +244,24 @@ function NodeCollapse({
     return <Text type="secondary">(Trống)</Text>;
   }
 
-  // Giữ nguyên thứ tự order từ childrenMap (đã sort ở useMemo),
-  // không tách riêng leaf/expandable để tránh Điều không có khoản
-  // (vd Điều 2) bị đẩy lên đầu Chương.
-  const expandableKids = kids.filter(
-    (k) => (childrenMap.get(k.id) ?? []).length > 0,
-  );
-  const expandableById = new Map(expandableKids.map((k) => [k.id, k]));
+  // Giữ nguyên thứ tự order từ childrenMap (đã sort ở useMemo).
+  // Điều (ARTICLE) luôn dùng Collapse để có thể expand/collapse dù không có
+  // khoản nào (ví dụ Điều 2) — content hiển thị bên trong body của Collapse.
+  // Các loại khác (SECTION/MỤc/CHAPTER) cũng dùng Collapse nếu có children;
+  // không có children thì dùng LeafRow ( cho title ngắn như "Khoản 1").
+  const expandableKids = kids.filter((k) => {
+    const hasChildren = (childrenMap.get(k.id) ?? []).length > 0;
+    if (hasChildren) return true;
+    // ARTICLE không có children → vẫn expandable (content nằm trong node)
+    return k.kind === "ARTICLE";
+  });
+  const expandableById =new Map(expandableKids.map((k) => [k.id, k]));
 
   return (
     <div>
       {kids.map((n) => {
         if (expandableById.has(n.id)) {
+          const hasChildren = (childrenMap.get(n.id) ?? []).length > 0;
           return (
             <Collapse
               key={n.id}
@@ -271,7 +278,7 @@ function NodeCollapse({
                 {
                   key: n.id,
                   label: <NodeContent section={n} />,
-                  children: (
+                  children: hasChildren ? (
                     <NodeCollapse
                       parentId={n.id}
                       depth={depth + 1}
@@ -279,6 +286,20 @@ function NodeCollapse({
                       activeKeys={activeKeys}
                       setActiveKeys={setActiveKeys}
                     />
+                  ) : (
+                    // ARTICLE không có children: hiển thị content bên trong body
+                    n.content ? (
+                      <div
+                        style={{
+                          padding: "4px 0 8px 8px",
+                          whiteSpace: "pre-wrap",
+                        }}
+                      >
+                        <Text type="secondary">{n.content}</Text>
+                      </div>
+                    ) : (
+                      <Text type="secondary">(Không có nội dung)</Text>
+                    )
                   ),
                   style:
                     depth === 0
@@ -295,7 +316,7 @@ function NodeCollapse({
   );
 }
 
-/** Leaf: Khoản / Điểm / Điều không có khoản con - hiển thị title + content */
+/** Leaf: Khoản/Điểm (title ngắn như "Khoản 1", "Điểm a") + content. */
 function LeafRow({ node, depth }: { node: Section; depth: number }) {
   const indent = depth * 16;
 
@@ -308,7 +329,14 @@ function LeafRow({ node, depth }: { node: Section; depth: number }) {
         borderLeft: depth > 0 ? "2px solid #d9d9d9" : undefined,
       }}
     >
-      <NodeContent section={node} />
+      <Text strong style={{ whiteSpace: "pre-wrap" }}>
+        {node.title}
+      </Text>
+      {node.content && (
+        <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>
+          <Text type="secondary">{node.content}</Text>
+        </div>
+      )}
     </div>
   );
 }

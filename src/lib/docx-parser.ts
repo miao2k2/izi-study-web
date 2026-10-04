@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Parser văn bản pháp luật từ file .docx
  *
  * Cấu trúc văn bản pháp luật VN gồm các cấp:
@@ -12,8 +12,9 @@
  *
  * === Lưu ý về cách lưu vào DB ===
  * - `number` lưu phần số/định danh thuần: "I", "1", "a"
- * - `title`  lưu tiêu đề đầy đủ để hiển thị luôn: "Chương I: NHỮNG QUY ĐỊNH CHUNG",
- *   "Điều 1: Phạm vi điều chỉnh", "Khoản 1: ...", "Điểm a) ..."
+ * - `title` lưu tiêu đề để hiển thị luôn: "Chương I: NHỮNG QUY ĐỊNH CHUNG",
+ *   "Điều 2: Đối tượng áp dụng", "Khoản 1", "Điểm a"
+ *   - Khoản/Điểm: KHÔNG gắn nội dung vào title để tránh duplicate với content
  * - `content` lưu phần text của Khoản/Điểm/Điều (nội dung sau tiêu đề nếu có)
  *
  * Nếu 1 Chương chỉ có dòng "Chương I" mà không có tiêu đề phía sau, parser sẽ
@@ -24,9 +25,9 @@ export type SectionKind = "CHAPTER" | "SECTION" | "ARTICLE" | "CLAUSE" | "POINT"
 
 export type ParsedNode = {
   kind: SectionKind;
-  number: string; // "I", "1", "a"
-  title?: string; // "Chương I: NHỮNG QUY ĐỊNH CHUNG", "Điều 1: Phạm vi điều chỉnh"
-  content?: string; // Phần nội dung (Khoản/Điểm/Điều không có tiêu đề riêng)
+  number: string;
+  title?: string;
+  content?: string;
   children: ParsedNode[];
 };
 
@@ -41,11 +42,6 @@ const KIND_LABEL: Record<SectionKind, string> = {
 /**
  * Gom các dòng text kế tiếp ngay sau chapter/section chỉ có số (không có title).
  * Dừng khi gặp 1 dòng match cấp mới (chapter/section/article/clause/point).
- * Trả về phần text đã gom (bỏ dòng đầu vì p không) - hoặc undefined nếu không có.
- *
- * @param paragraphs - toàn bộ paragraphs
- * @param i - index hiện tại (chính là dòng "p")
- * @param kind - loại đang gom (CHAPTER/SECTION)
  */
 function collectTrailingText(
   paragraphs: { text: string; bold: boolean }[],
@@ -60,7 +56,6 @@ function collectTrailingText(
       j++;
       continue;
     }
-    // Dừng khi dòng tiếp theo khởi đầu 1 cấp mới
     if (
       /^Chương\s+[IVXLCDM]+\b/i.test(next) ||
       /^([IVXLCDM]+)\s*-\s*/.test(next) ||
@@ -71,28 +66,33 @@ function collectTrailingText(
     }
     parts.push(next);
     j++;
-    // Giới hạn tối đa 5 dòng để tránh nuốt nhầm
     if (parts.length >= 5) break;
   }
   return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
-/** Build tiêu đề đầy đủ theo kind. Nếu titleRest rỗng trả về undefined. */
+/**
+ * Build tiêu đề theo kind.
+ * - Khoản/Điểm: chỉ "Khoản 1", "Điểm a" - KHÔNG gắn nội dung để tránh duplicate
+ *   với content (vì content chính là phần titleRest).
+ * - Chương/Mục/Điều: gắn titleRest nếu có, fallback "Chương I", "Điều 2".
+ */
 function buildTitle(
   kind: SectionKind,
   number: string,
   titleRest?: string,
-): string | undefined {
+): string {
   const label = KIND_LABEL[kind];
   const rest = titleRest?.trim();
-  if (!rest) return undefined;
-  // Khoản/Điểm/Điều/Mục: "Khoản 1: ..."  • Chương: "Chương I: ..."
+  if (kind === "CLAUSE" || kind === "POINT") {
+    return `${label} ${number}`;
+  }
+  if (!rest) return `${label} ${number}`;
   return `${label} ${number}: ${rest}`;
 }
 
 /**
- * Phân tích các đoạn văn bản trích xuất từ file docx (đã là plain text theo từng paragraph).
- * Mỗi phần tử có dạng { text: string, bold: boolean }.
+ * Phân tích các đoạn văn bản trích xuất từ file docx.
  */
 export function parseLawText(
   paragraphs: { text: string; bold: boolean }[],
@@ -106,11 +106,9 @@ export function parseLawText(
   for (let i = 0; i < paragraphs.length; i++) {
     const para = paragraphs[i];
     const p = para.text.trim();
-    const bold = para.bold;
     if (!p) continue;
 
     // 1. Chương
-    // Chấp nhận các dạng: "Chương I", "Chương I.", "Chương I NHỮNG QUY ĐỊNH CHUNG"...
     const chapterMatch = p.match(/^Chương\s+([IVXLCDM]+)\b\s*(.*)$/i);
     if (chapterMatch) {
       const num = chapterMatch[1];
@@ -126,7 +124,7 @@ export function parseLawText(
       currentArticle = null;
       continue;
     }
-    // Chương kiểu gộp: "Chương I NHỮNG QUY ĐỊNH CHUNG"
+    // Chương kiểu gộp
     const chapterCombined = p.match(/^Chương\s+([IVXLCDM]+)\s+(.+)$/i);
     if (chapterCombined) {
       currentChapter = {
@@ -145,7 +143,7 @@ export function parseLawText(
       continue;
     }
 
-    // 1b. Nghị quyết: "I- QUAN ĐIỂM", "II- MỤC TIÊU" ...
+    // 1b. Nghị quyết:"I- QUAN ĐIỂM"
     const romanSectionMatch = p.match(/^([IVXLCDM]+)\s*-\s*(.+)$/);
     if (romanSectionMatch) {
       currentChapter = {
@@ -183,7 +181,7 @@ export function parseLawText(
     // 3. Điều
     const articleMatch = p.match(/^Điều\s+(\d+)\s*\.?\s*(.*)$/);
     if (articleMatch) {
-      // Nếu chưa có Chương nào (file bị cắt từ giữa Chương trước) - tạo Chương ảo
+      // File bị cắt từ giữa Chương - tạo Chương ảo
       if (currentChapter === root) {
         currentChapter = {
           kind: "CHAPTER",
@@ -200,22 +198,17 @@ export function parseLawText(
         kind: "ARTICLE",
         number: num,
         title: buildTitle("ARTICLE", num, titleRest),
-        // content chỉ chứa text thừa (không lặp titleRest) - vd "Trong văn bản này..."
         content: undefined,
         children: [],
       };
-      // Article thuộc Mục (nếu có) hoặc thuộc Chương
       const container = currentSection ?? currentChapter;
       container.children.push(currentArticle);
       continue;
     }
 
-    // 3b. Nghị quyết: item "1. Nâng cao nhận thức..." -> ARTICLE (1 cấp).
-    // Chỉ match khi CHƯA có currentArticle nào - nếu đang trong điều thì
-    // dòng "1. ..." phải là Khoản (xử lý ở case 4 phía dưới).
+    // 3b. Nghị quyết item
     const nqItemMatch = p.match(/^(\d+)\.\s+(.+)$/);
     if (nqItemMatch && !currentArticle) {
-      // Nếu chưa có Chương nào - tạo Chương ảo
       if (currentChapter === root) {
         currentChapter = {
           kind: "CHAPTER",
@@ -228,7 +221,6 @@ export function parseLawText(
       }
       const num = nqItemMatch[1];
       const titleRest = nqItemMatch[2].trim();
-      // Reset currentSection để article tiếp theo rơi đúng vị trí
       currentArticle = {
         kind: "ARTICLE",
         number: num,
@@ -241,9 +233,8 @@ export function parseLawText(
       continue;
     }
 
-    // 4. Khoản / Điểm (chỉ hoạt động khi đang trong 1 điều)
+    // 4. Khoản / Điểm (chỉ trong điều)
     if (currentArticle) {
-      // Điểm a) b) c) đ) e)...
       const pointMatch = p.match(/^([a-zđ])\)\s*(.+)$/i);
       if (pointMatch) {
         const num = `${pointMatch[1]})`;
@@ -257,7 +248,6 @@ export function parseLawText(
         });
         continue;
       }
-      // Khoản 1. 2. ...
       const clauseMatch = p.match(/^(\d+)\s*\.\s*(.+)$/);
       if (clauseMatch) {
         const num = clauseMatch[1];
@@ -271,11 +261,10 @@ export function parseLawText(
         });
         continue;
       }
-      // Nội dung thuộc Điều nhưng không phải khoản/điểm: gộp vào content
+      // Text thừa trong Điều
       currentArticle.content =
         (currentArticle.content ? currentArticle.content + " " : "") + p;
     } else if (currentSection && !currentSection.title) {
-      // Mục chỉ có "Mục 1" rời rạc → gom các dòng kế tiếp vào title
       const rest = collectTrailingText(paragraphs, i, "SECTION");
       const text = rest ?? p;
       const combined = buildTitle("SECTION", currentSection.number, text);
@@ -285,7 +274,6 @@ export function parseLawText(
       !currentChapter.title &&
       !currentSection
     ) {
-      // Chương chỉ có "Chương I" rời rạc → gom các dòng kế tiếp vào title
       const rest = collectTrailingText(paragraphs, i, "CHAPTER");
       const text = rest ?? p;
       const combined = buildTitle("CHAPTER", currentChapter.number, text);
