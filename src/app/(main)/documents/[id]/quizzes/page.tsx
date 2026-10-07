@@ -455,6 +455,7 @@ export default function QuizzesPage() {
           dataSource={items}
           loading={loading}
           pagination={{ pageSize: 10 }}
+          scroll={{ x: 'max-content' }}
           locale={{ emptyText: "Chưa có câu hỏi nào" }}
           columns={[
             {

@@ -155,9 +155,10 @@ export default function DocumentsPage() {
           rowKey="id"
           dataSource={docs}
           loading={loading}
+          scroll={{ x: 'max-content' }}
           pagination={{ pageSize: 10 }}
           columns={[
-            { title: "Tiêu đề", dataIndex: "title" },
+            { title: "Tiêu đề", fixed: 'left', dataIndex: "title" },
             {
               title: "Số hiệu",
               dataIndex: "documentNo",
@@ -199,7 +200,8 @@ export default function DocumentsPage() {
             },
             {
               title: "Thao tác",
-              width: 280,
+              fixed: 'right',
+              width: 100,
               render: (_, row) => (
                 <Space wrap>
                   <Button
@@ -208,11 +210,11 @@ export default function DocumentsPage() {
                     icon={<EyeOutlined />}
                     onClick={() => router.push(`/documents/${row.id}`)}
                   >
-                    Xem
+                    {/* Xem */}
                   </Button>
                   <Upload {...uploadProps(row.id)}>
                     <Button size="small" type="link" icon={<UploadOutlined />}>
-                      Import .docx
+                      {/* Import .docx */}
                     </Button>
                   </Upload>
                   <Button
@@ -221,11 +223,11 @@ export default function DocumentsPage() {
                     icon={<EditOutlined />}
                     onClick={() => openEdit(row)}
                   >
-                    Sửa
+                    {/* Sửa */}
                   </Button>
                   <Popconfirm title="Xóa?" onConfirm={() => onDelete(row.id)}>
                     <Button size="small" type="link" danger icon={<DeleteOutlined />}>
-                      Xóa
+                      {/* Xóa */}
                     </Button>
                   </Popconfirm>
                 </Space>

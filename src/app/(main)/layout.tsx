@@ -165,7 +165,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </Drawer>
         )}
 
-        <Content className="izi-page">{children}</Content>
+        <Content style={{ width: "100vw", padding: "10px" }}>{children}</Content>
       </Layout>
     </Layout>
   );
