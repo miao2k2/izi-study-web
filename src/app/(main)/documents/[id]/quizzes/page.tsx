@@ -57,6 +57,7 @@ export default function QuizzesPage() {
   const [answers, setAnswers] = useState<
     { text: string; isCorrect: boolean }[]
   >([{ text: "", isCorrect: true }, { text: "", isCorrect: false }]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // Quiz mode
   const [doing, setDoing] = useState<Quiz[] | null>(null);
@@ -91,6 +92,13 @@ export default function QuizzesPage() {
   useEffect(() => {
     if (docId) load();
   }, [docId]);
+
+  // Giữ selection đồng bộ với dataSource hiện tại
+  useEffect(() => {
+    setSelectedIds((prev) =>
+      prev.filter((id) => items.some((q) => q.id === id)),
+    );
+  }, [items]);
 
   const openCreate = () => {
     setEditing(null);
@@ -153,6 +161,28 @@ export default function QuizzesPage() {
     }
     msg.success("Đã xóa");
     load();
+  };
+
+  const onBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    const hide = msg.loading(`Đang xóa ${selectedIds.length} câu hỏi...`, 0);
+    try {
+      const res = await fetch("/api/quizzes/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        msg.error(data.error ?? "Lỗi");
+        return;
+      }
+      msg.success(`Đã xóa ${data.deleted} câu hỏi`);
+      setSelectedIds([]);
+      load();
+    } finally {
+      hide();
+    }
   };
 
   const onImport: UploadProps["beforeUpload"] = async (file) => {
@@ -450,12 +480,51 @@ export default function QuizzesPage() {
       </div>
 
       <Card>
+        {selectedIds.length > 0 && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "8px 12px",
+              background: "#e6f4ff",
+              border: "1px solid #91caff",
+              borderRadius: 4,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 8,
+            }}
+          >
+            <Text>Đã chọn {selectedIds.length} câu hỏi</Text>
+            <Space>
+              <Button size="small" onClick={() => setSelectedIds([])}>
+                Bỏ chọn
+              </Button>
+              <Popconfirm
+                title={`Xóa ${selectedIds.length} câu hỏi đã chọn?`}
+                description="Hành động này không thể hoàn tác."
+                okText="Xóa"
+                cancelText="Hủy"
+                okButtonProps={{ danger: true }}
+                onConfirm={onBulkDelete}
+              >
+                <Button size="small" danger icon={<DeleteOutlined />}>
+                  Xóa hàng loạt
+                </Button>
+              </Popconfirm>
+            </Space>
+          </div>
+        )}
         <Table
           rowKey="id"
           dataSource={items}
           loading={loading}
           pagination={{ pageSize: 10 }}
           scroll={{ x: 'max-content' }}
+          rowSelection={{
+            selectedRowKeys: selectedIds,
+            onChange: (keys) => setSelectedIds(keys as string[]),
+          }}
           locale={{ emptyText: "Chưa có câu hỏi nào" }}
           columns={[
             {
