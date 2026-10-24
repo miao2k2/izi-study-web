@@ -13,6 +13,7 @@ import {
   Select,
   Space,
   Table,
+  Tabs,
   Tag,
   Typography,
   Upload,
@@ -58,6 +59,8 @@ export default function QuizzesPage() {
     { text: string; isCorrect: boolean }[]
   >([{ text: "", isCorrect: true }, { text: "", isCorrect: false }]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [filterSection, setFilterSection] = useState<string>("");
+  const [quizSection, setQuizSection] = useState<string>(""); // chọn section khi làm quiz
 
   // Quiz mode
   const [doing, setDoing] = useState<Quiz[] | null>(null);
@@ -99,6 +102,13 @@ export default function QuizzesPage() {
       prev.filter((id) => items.some((q) => q.id === id)),
     );
   }, [items]);
+
+  // Khi đổi tab section, bỏ chọn các id không thuộc tab hiện tại
+  useEffect(() => {
+    setSelectedIds((prev) =>
+      prev.filter((id) => filteredItems.some((q) => q.id === id)),
+    );
+  }, [filterSection]);
 
   const openCreate = () => {
     setEditing(null);
@@ -208,14 +218,14 @@ export default function QuizzesPage() {
 
   // ===== QUIZ MODE =====
   const startQuiz = async () => {
-    if (items.length === 0) {
+    if (quizItems.length === 0) {
       msg.warning("Chưa có câu hỏi");
       return;
     }
     // Shuffle câu hỏi
-    const idx = items.map((_, i) => i).sort(() => Math.random() - 0.5);
+    const idx = quizItems.map((_, i) => i).sort(() => Math.random() - 0.5);
     // Shuffle đáp án cho mỗi câu
-    const shuffled = items.map((q) => ({
+    const shuffled = quizItems.map((q) => ({
       ...q,
       answers: [...q.answers].sort(() => Math.random() - 0.5),
     }));
@@ -285,6 +295,16 @@ export default function QuizzesPage() {
         label: s.title ?? "",
       })),
   ];
+
+  // Items đã lọc theo tab section
+  const filteredItems = filterSection
+    ? items.filter((q) => q.section?.id === filterSection)
+    : items;
+
+  // Items dùng để làm quiz (theo section đã chọn, hoặc tất cả)
+  const quizItems = quizSection
+    ? items.filter((q) => q.section?.id === quizSection)
+    : items;
 
   if (!doc) return <Empty description="Đang tải..." />;
 
@@ -455,13 +475,30 @@ export default function QuizzesPage() {
           Quiz · {doc.title}
         </Title>
         <Space wrap>
+          <Select
+            value={quizSection || ""}
+            onChange={(v) => setQuizSection(v || "")}
+            style={{ minWidth: 200 }}
+            placeholder="— Chọn mục để làm —"
+            options={[
+              { value: "", label: `Cả tài liệu (${items.length} câu)` },
+              ...sectionOptions
+                .filter((o) => o.value)
+                .map((o) => {
+                  const count = items.filter(
+                    (q) => q.section?.id === o.value,
+                  ).length;
+                  return { value: o.value, label: `${o.label} (${count})` };
+                }),
+            ]}
+          />
           <Button
             type="primary"
             icon={<PlayCircleOutlined />}
-            disabled={items.length === 0}
+            disabled={quizItems.length === 0}
             onClick={startQuiz}
           >
-            Làm quiz ({items.length} câu)
+            Làm quiz ({quizItems.length} câu)
           </Button>
           <Button
             icon={<DownloadOutlined />}
@@ -480,6 +517,28 @@ export default function QuizzesPage() {
       </div>
 
       <Card>
+        <Tabs
+          activeKey={filterSection || "all"}
+          onChange={(k) => setFilterSection(k === "all" ? "" : k)}
+          items={[
+            {
+              key: "all",
+              label: `Tất cả (${items.length})`,
+            },
+            ...sectionOptions
+              .filter((o) => o.value)
+              .map((o) => {
+                const count = items.filter(
+                  (q) => q.section?.id === o.value,
+                ).length;
+                return {
+                  key: o.value,
+                  label: `${o.label} (${count})`,
+                };
+              }),
+          ]}
+          style={{ marginBottom: 12 }}
+        />
         {selectedIds.length > 0 && (
           <div
             style={{
@@ -517,7 +576,7 @@ export default function QuizzesPage() {
         )}
         <Table
           rowKey="id"
-          dataSource={items}
+          dataSource={filteredItems}
           loading={loading}
           pagination={{ pageSize: 10 }}
           scroll={{ x: 'max-content' }}
